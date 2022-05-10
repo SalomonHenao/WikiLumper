@@ -54,6 +54,7 @@ sub export {
     }
     print "\nCheck for attachments:\n\n";
     foreach my $page (sort keys %{$data}) {
+        my $printData = $data->{$page};
         $data->{$page}->{body} = translateMarkup($data->{$page}->{body}, $debug);
         while ($data->{$page}->{body} =~ /\!([^\!\s]+?)\!/g) {
             my $image= $1;
@@ -179,21 +180,35 @@ sub translateMarkup {
     $page =~ s/(\n|^)\={1}(.+?)\={1,}/$1h6. $2/gs;
 
     # Lists
-    $page =~ s/(\n|^)  \*/$1\*/gs;
-    $page =~ s/(\n|^)    \*/$1\*\*/gs;
-    $page =~ s/(\n|^)      \*/$1\*\*\*/gs;
-    $page =~ s/(\n|^)  \-/$1\#/gs;
-    $page =~ s/(\n|^)    \-/$1\#\#/gs;
-    $page =~ s/(\n|^)      \-/$1\#\#\#/gs;
+    $page =~ s/(\n|^)  \*\s/$1\* /gs;
+    $page =~ s/(\n|^)    \*\s/$1\*\* /gs;
+    $page =~ s/(\n|^)      \*\s/$1\*\*\* /gs;
+    $page =~ s/(\n|^)  \-\s/$1\# /gs;
+    $page =~ s/(\n|^)    \-\s/$1\#\# /gs;
+    $page =~ s/(\n|^)      \-\s/$1\#\#\# /gs;
 
     # Emodji
     $page =~ s/\:\!\:/\(\!\)/g;
 
     # Text effects
-    $page =~ s/\*\*\s*(.+?)\s*\*\*/\*$1\*/gs; # bold
+
+    #Modified here ----------------------------------------------------------- #Modified to avoid affecting the lists
+    $page =~ s/!(\n|^)\*\*\s*(.+?)\s*\*\*/\*$2\*/gs; # bold
+    $page =~ s/\*\*(\S+?)\*\*/\*$1\*/gs; # bold
+    #-------------------------------------------------------------------------
+
     $page =~ s/__\s*(.+?)\s*__/\+$1\+/gd; # underline
+
+    #Modified here ----------------------------------------------------------- #Changed italic behavior to avoid corrupted URLs
     $page =~ s/(^|\n|\s)\/\/\s*(.+?)\s*\/\//$1_$2_/gs; # italic
-    $page =~ s/\'\'\s*([^\n\']+?)\s*\'\'/\{\{$1\}\}/gs; # monospace
+    $page =~ s/\:\/\//tempDisabledUrl/gs; # italic
+    $page =~ s/(^|\n|\s)(.+?)(\S\s*|\s*)\/\/(.+?)\/\/\s*/$1$2$3 _$4_ /gs; # italic
+    $page =~ s/tempDisabledUrl/\:\/\//gs; # italic
+
+    #Modified here ----------------------------------------------------------- #Modified to avoid affecting the code remarks
+    $page =~ s/\'\'(!\n)\s*([^\n\']+?)\s*\'\'/\{\{$1\}\}/gs; # monospace
+    #-------------------------------------------------------------------------
+
     $page =~ s/<del>\s*(.+?)\s*<\/del>/-$1-/gs; # strikethrough
     $page =~ s/<sub>\s*(.+?)\s*<\/sub>/~$1~/gs; # subscript
     $page =~ s/<sup>\s*(.+?)\s*<\/sup>/\^$1\^/gs; # superscript
@@ -202,12 +217,73 @@ sub translateMarkup {
     $page =~ s/\<note\>(.+?)\<\/note\>/\{note\}$1\{note\}/gs;
     $page =~ s/\<note tip\>(.+?)\<\/note\>/\{tip\}$1\{tip\}/gs;
     $page =~ s/\<note important\>(.+?)\<\/note\>/\{warning\}$1\{warning\}/gs;
-    $page =~ s/\<code\>(.+?)\<\/code\>/\{code\}$1\{code\}/gs;
+
+    #Patch 1 ----------------------------------------------------------------- #Adds handling of inline and multi-line code styling
+    $page =~ s/\'\'\n\'\'/\n/gs;
+    $page =~ s/\'\'\%\%(.+?)\%\%\'\'/\'\'$1\'\'/gs;
+    $page =~ s/\'\'\'\'\'\'/\<temp\>/gs;
+    $page =~ s/(\s|\n)\'\'\n(.+?)\'\'\n/$1\{code\}$2\{code\}/gs;
+    $page =~ s/\'\'(.+?)\'\'/\{\{$1\}\}/gs;
+    $page =~ s/\<temp\>/\{\{\'\'\}\}/gs;
+    #------------------------------------------------------------------------- End
+    
+    #Patch 2.1 --------------------------------------------------------------- #Avoids the legacy instructions corruption
+    $page =~ s/\<code\>\<\/code\>/\<temp\>\<\/temp\>/gs;
+    $page =~ s/\<code (\S+?)\>\<\/code\>/\<temp $1\>\<\/temp\>/gs;
+    #------------------------------------------------------------------------- End
+
+    $page =~ s/\<code\>(.+?)\<\/code\>/\{code\}$1\{code\}\n/gs;
     $page =~ s/\<code (\S+?)\>/\{code:language=$1\}/gs;
     $page =~ s/\<code\>/\{code\}/gs;
-    $page =~ s/\<\/code\>/\{code\}/gs;
+    $page =~ s/\<\/code\>/\{code\}\n/gs;
     $page =~ s/\<file\>/\{code\}/gs;
-    $page =~ s/\<\/file\>/\{code\}/gs;
+    $page =~ s/\<\/file\>/\{code\}\n/gs;
+
+    #Patch 2.2 ---------------------------------------------------------------- #Avoids the legacy instructions corruption
+    $page =~ s/\<temp\>\<\/temp\>/\<code\>\<\/code\>/gs;
+    $page =~ s/\<temp (\S+?)\>\<\/temp\>/\<code $1\>\<\/code\>/gs;
+    #-------------------------------------------------------------------------- End
+
+    #Patch 3 ------------------------------------------------------------------ #Removes the \{ \} issue on code blocks
+    $page =~ s/(^|\n|\s)\\\{/$1\{/gs; 
+    $page =~ s/(^|\n|\s)\\\}/$1\}/gs;
+    #-------------------------------------------------------------------------- End
+    
+    #Patch 4 ------------------------------------------------------------------ #Adjusted to support tabulated code blocks
+    $page =~ s/\n\s*h1/$1\n\nh1/gs;
+    $page =~ s/\n\s*h2/$1\n\nh2/gs;
+    $page =~ s/\n\s*h3/$1\n\nh3/gs;
+    $page =~ s/\n\s*h4/$1\n\nh4/gs;
+    $page =~ s/\n\s*h5/$1\n\nh5/gs;
+
+    $page =~ s/\{\n(\s*\n|\n)/\{\n/gs;
+    $page =~ s/\}\n(\s*\n|\n)/\}\n/gs;
+    $page =~ s/\s*\-\-\-\-/\n\n\-\-\-\-/gs;
+    $page =~ s/\n\s*\n/\n\n/gs;
+    $page =~ s/(^|\n)\s\s\{code/$1\{code/gs;
+    $page =~ s/\n\n\s\s(.+?)\n(\n|\-|\S)(\n|\-|\S)/\n\n\{code\}\n  $1\n\{code\}\n$2$3/gs;
+    $page =~ s/\{code\}\n(\S)/\{code\}\n\n$1/gs;
+    #-------------------------------------------------------------------------- End
+
+    #Patch 5 ------------------------------------------------------------------ #Added symbols
+    $page =~ s/FIXME/\(x\)/gs;
+    my $copySymbol = chr(169);
+    $page =~ s/\((c|C)\)/$copySymbol/gs;
+    my $trademarkSymbol = chr(8482);
+    $page =~ s/\((tm|TM|Tm)\)/$trademarkSymbol/gs;
+    my $registeredSymbol = chr(174);
+    $page =~ s/\((r|R)\)/$registeredSymbol/gs;
+    my $leftArrowSymbol = chr(8592);
+    $page =~ s/(\n|\s)\<\-(\n|\s)/$1$leftArrowSymbol$2/gs;
+    my $rightArrowSymbol = chr(8594);
+    $page =~ s/(\n|\s)\-\>(\n|\s)/$1$rightArrowSymbol$2/gs;
+    my $doubleArrowSymbol = chr(8596);
+    $page =~ s/(\n|\s)\<\-\>(\n|\s)/$1$doubleArrowSymbol$2/gs;
+    my $shortLeftArrowSymbol = chr(171);
+    $page =~ s/(\n|\s)\<\<(\n|\s)/$1$shortLeftArrowSymbol$2/gs;
+    my $shortRightArrowSymbol = chr(187);
+    $page =~ s/(\n|\s)\>\>(\n|\s)/$1$shortRightArrowSymbol$2/gs;
+    #-------------------------------------------------------------------------- End
 
     # Tables
     # Headers
@@ -235,6 +311,7 @@ sub translateMarkup {
         $page =~ s/$fromPattern/$toPattern/;
     }
 
+    print "Result: $page";
     return $page;
 }
 
