@@ -54,7 +54,6 @@ sub export {
     }
     print "\nCheck for attachments:\n\n";
     foreach my $page (sort keys %{$data}) {
-        my $printData = $data->{$page};
         $data->{$page}->{body} = translateMarkup($data->{$page}->{body}, $debug);
         while ($data->{$page}->{body} =~ /\!([^\!\s]+?)\!/g) {
             my $image= $1;
@@ -310,8 +309,6 @@ sub translateMarkup {
         print "/$fromPattern/$toPattern/\n";
         $page =~ s/$fromPattern/$toPattern/;
     }
-
-    print "Result: $page";
     return $page;
 }
 
