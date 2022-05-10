@@ -149,7 +149,9 @@ sub translateMarkup {
     my $debug = shift;
 
     # Change line breaks
+    $page =~ s/\[\\\\/tempDisabledUrl/g;
     $page =~ s/\\\\/\n/g;
+    $page =~ s/tempDisabledUrl/\[\\\\/g;
 
     # Change attached images
     $page =~ s/\{\{\s*[\:]*([^\|\{\}\s]+).*?\}\}/"!".lc($1)."!"/ge;
